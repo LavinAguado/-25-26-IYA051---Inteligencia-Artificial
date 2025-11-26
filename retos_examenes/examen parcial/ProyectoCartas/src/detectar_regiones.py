@@ -71,6 +71,9 @@ def corregir_perspectiva(frame, pts):
     dst = np.array([[0, 0], [width, 0], [width, height], [0, height]], dtype="float32")
     M = cv2.getPerspectiveTransform(np.array([tl, tr, br, bl]), dst)
     warp = cv2.warpPerspective(frame, M, (width, height))
+     
+    if warp.shape[1] > warp.shape[0]:
+        warp = cv2.rotate(warp, cv2.ROTATE_90_CLOCKWISE)
 
     return warp
 
