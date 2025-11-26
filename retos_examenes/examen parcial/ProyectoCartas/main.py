@@ -1,44 +1,41 @@
 import cv2
 from src.deteccion import detectar_carta
-from src.detectar_regiones import corregir_perspectiva, extraer_regiones
+from src.detectar_regiones import corregir_perspectiva, extraer_regiones, enderezar_por_pca
 from src.plantillas import cargar_plantillas, comparar
 
 def main():
-    # Cargar plantillas
     plantillas_numeros, plantillas_palos = cargar_plantillas()
 
-    # Usar la cámara principal de DroidCam
     cam = cv2.VideoCapture(1)
 
     if not cam.isOpened():
         print("❌ No se pudo abrir la cámara")
         return
 
-    print("📸 Reconocimiento listo. Pulsa Q para salir.\n")
+    print("\n📸 Reconocimiento activo — Q para salir\n")
 
     while True:
         ret, frame = cam.read()
         if not ret:
             continue
 
-        # 1. Detectar carta
         pts, carta = detectar_carta(frame)
 
-        if carta is not None:
-            # 2. Corregir perspectiva (warp)
-            warp = corregir_perspectiva(carta)
+        if pts is not None and carta is not None:
+            
+            # --- 1. Perspectiva corregida ---
+            warp = corregir_perspectiva(frame, pts)
 
-            # 3. Extraer número y palo
+            # --- 3. Extraer regiones ---
             region_num, region_palo = extraer_regiones(warp)
 
-            # 4. Reconocimiento por plantillas
+            # --- 4. Reconocimiento ---
             numero, score_n = comparar(region_num, plantillas_numeros)
             palo, score_p = comparar(region_palo, plantillas_palos)
 
-            # 5. Mostrar resultado
             texto = f"{numero} de {palo}"
-            cv2.putText(frame, texto, (20, 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+            cv2.putText(frame, texto, (20, 45), cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0,255,0), 2)
 
             cv2.imshow("Carta corregida", warp)
             cv2.imshow("Numero", region_num)
@@ -51,7 +48,6 @@ def main():
 
     cam.release()
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     main()

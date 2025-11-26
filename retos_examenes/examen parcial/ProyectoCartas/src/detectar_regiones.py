@@ -1,16 +1,54 @@
 import cv2
 import numpy as np
 
+angulo_mem = None   # filtro de estabilización
+
+def enderezar_por_pca(warp):
+    global angulo_mem
+
+    gray = cv2.cvtColor(warp, cv2.COLOR_BGR2GRAY)
+    _, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+    conts, _ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not conts: 
+        return warp
+
+    c = max(conts, key=cv2.contourArea)
+    rect = cv2.minAreaRect(c)
+    (cx, cy), (w, h), ang = rect
+
+    # ============================
+    # NORMALIZAR ANGULO CORRECTO
+    # ============================
+    if w < h:
+        ang = ang
+    else:
+        ang += 90
+
+    # ============================
+    # SUAVIZAR VIBRACION
+    # ============================
+    if angulo_mem is None:
+        angulo_mem = ang
+    else:
+        angulo_mem = angulo_mem * 0.8 + ang * 0.2  # filtro low-pass
+
+    h_img, w_img = warp.shape[:2]
+    M = cv2.getRotationMatrix2D((w_img//2, h_img//2), angulo_mem, 1.0)
+    rotada = cv2.warpAffine(warp, M, (w_img, h_img), borderValue=(255,255,255))
+
+    return rotada
+
 # -------------------------------------------------------------
 # 1. Warp perspectiva (recibe frame y puntos)
 # -------------------------------------------------------------
-def corregir_perspectiva(frame, pts):
-    import numpy as np
-    import cv2
+import numpy as np
+import cv2
 
+def corregir_perspectiva(frame, pts):
     pts = np.array(pts, dtype="float32")
 
-    # Ordenar puntos correctamente (TL, TR, BR, BL)
+    # Ordenar puntos para evitar inclinaciones raras
     s = pts.sum(axis=1)
     diff = np.diff(pts, axis=1)
 
@@ -19,19 +57,23 @@ def corregir_perspectiva(frame, pts):
     tr = pts[np.argmin(diff)]
     bl = pts[np.argmax(diff)]
 
-    # Tamaño estándar para cartas Fournier (alto>ancho)
-    W = 200
-    H = 280   # proporción 1.40
+    # Medir proporciones reales para evitar rotación inclinada
+    w1 = np.linalg.norm(br - bl)
+    w2 = np.linalg.norm(tr - tl)
+    width = int(max(w1, w2))
 
-    dst = np.array([[0, 0],
-                    [W - 1, 0],
-                    [W - 1, H - 1],
-                    [0, H - 1]], dtype="float32")
+    h1 = np.linalg.norm(tr - br)
+    h2 = np.linalg.norm(tl - bl)
+    height = int(max(h1, h2))
 
+    # >>>>> ESTA ES LA CLAVE <<<<<
+    # ROI se genera usando los puntos *ordenados*, no forzados a 200x300
+    dst = np.array([[0, 0], [width, 0], [width, height], [0, height]], dtype="float32")
     M = cv2.getPerspectiveTransform(np.array([tl, tr, br, bl]), dst)
-    warp = cv2.warpPerspective(frame, M, (W, H))
+    warp = cv2.warpPerspective(frame, M, (width, height))
 
     return warp
+
 
 # -------------------------------------------------------------
 # 2. Rotación simple y estable (0 o 180 grados)
