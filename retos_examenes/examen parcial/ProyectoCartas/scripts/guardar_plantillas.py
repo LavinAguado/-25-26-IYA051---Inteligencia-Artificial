@@ -2,6 +2,7 @@ import cv2
 import os
 import sys
 
+# Acceder al módulo src/
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.deteccion import detectar_carta
@@ -15,35 +16,37 @@ os.makedirs(BASE_PALO, exist_ok=True)
 
 cam = cv2.VideoCapture(1)
 
-if not cam.isOpened():
-    print("❌ No se pudo abrir la cámara.")
-    exit()
+print("\n🎯 CAPTURADOR DE PLANTILLAS")
+print("N = guardar número")
+print("P = guardar palo")
+print("Q = salir\n")
 
-print("\n🎯 CAPTURA LISTA — 'N' guarda número, 'P' guarda palo, 'Q' sale\n")
-
-cN = 0
-cP = 0
+contador_n = 0
+contador_p = 0
 
 while True:
     ret, frame = cam.read()
     if not ret:
         continue
 
-    pts, _ = detectar_carta(frame)
+    pts, carta = detectar_carta(frame)
 
     if pts is not None:
-
         warp = corregir_perspectiva(frame, pts)
-
         rot = detectar_rotacion(warp)
-        if rot == 180:
-            warp = cv2.rotate(warp, cv2.ROTATE_180)
 
-        num, palo = extraer_regiones(warp)
+        if rot == 90:
+            warp = cv2.rotate(warp, cv2.ROTATE_90_CLOCKWISE)
+        elif rot == 180:
+            warp = cv2.rotate(warp, cv2.ROTATE_180)
+        elif rot == 270:
+            warp = cv2.rotate(warp, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+        region_num, region_palo = extraer_regiones(warp)
 
         cv2.imshow("Carta corregida", warp)
-        cv2.imshow("Número", num)
-        cv2.imshow("Palo", palo)
+        cv2.imshow("Numero detectado", region_num)
+        cv2.imshow("Palo detectado", region_palo)
 
     cv2.imshow("Camara", frame)
 
@@ -52,19 +55,17 @@ while True:
     if key == ord('q'):
         break
 
-    if pts is not None:
+    if key == ord('n') and pts is not None:
+        nombre = f"{BASE_NUM}/num_{contador_n}.jpg"
+        cv2.imwrite(nombre, region_num)
+        print("👉 Guardado:", nombre)
+        contador_n += 1
 
-        if key == ord('n'):
-            name = f"{BASE_NUM}/num_{cN}.jpg"
-            cv2.imwrite(name, num)
-            print("💾 Guardado número:", name)
-            cN += 1
-
-        if key == ord('p'):
-            name = f"{BASE_PALO}/palo_{cP}.jpg"
-            cv2.imwrite(name, palo)
-            print("💾 Guardado palo:", name)
-            cP += 1
+    if key == ord('p') and pts is not None:
+        nombre = f"{BASE_PALO}/palo_{contador_p}.jpg"
+        cv2.imwrite(nombre, region_palo)
+        print("👉 Guardado:", nombre)
+        contador_p += 1
 
 cam.release()
 cv2.destroyAllWindows()
